@@ -31,20 +31,6 @@ for apl in apls:
 
 
 def populate_nodes():
-    """
-    Populate nodes with data. 
-
-    Returns:
-    
-    nodes - Dictionary with (Ip -> 
-        (dictionary json -> feed.json, 
-        macs -> mac addresses for all interfaces, 
-        neighbors -> list of nodes detectable from that node)),
-    
-    rogue_nodes - List of nodes (bssid, ssid, signal) of all node not registered to the network.
-
-    """
-
     nodes = {apl[0] : {} for apl in apls}
     friendly_macs = []
     neighbor_nodes = []
@@ -64,9 +50,6 @@ def populate_nodes():
     return nodes, rogue_nodes
 
 def get_json(node_ip):
-    """
-    Requests and returns json from node ip address. 
-    """
     try:
         node_json = requests.get('http://' + node_ip + '/nodewatcher/feed').json()
         return node_json
