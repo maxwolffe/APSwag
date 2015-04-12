@@ -1,5 +1,6 @@
 import json
-import urllib.request
+#import urllib.request
+import requests
 
 
 apString =     """ 10.20.8.40 - FamilyRoom, 04:18:d6:20:60:44, UniFi AP-Pro, channel 6, 140
@@ -89,6 +90,35 @@ def test(ipList):
 	a =  findRogues(jsons)
 	print(a)
 	#return findRogues(jsons)
+
+
+def node_neighbors(node):
+	"""
+	Return a list of node tuples ((bssid, ssid), signal) which are neighbors to node. (Can be detected by radio1)
+
+	Arguments:
+	node - (bssid [MAC Address], ssid, ip_address)
+	"""
+	node_ip = node[2] #Should I make nodes dictionaries instead?
+	node_json = requests.get(node_ip + '/nodewatcher/feed/').json()
+	radio1_neighbors = []
+	try:
+		radio1_json = node_json['core.wireless']['radios']['radio1']
+		radio1_neighbors = [(r_node['bssid'], r_node['ssid'])]
+	except KeyError as e:
+		print("Key Error " + e)
+	return radio1_neighbors
+
+
+def node_graph(node_list):
+	""" 
+	Return a dictionary of node tuples (bssid, ssid, room_name, ip_address) as keys and a list of (node tuple, signal) that are neighbors as values. 
+	"""
+	node_graph = {}
+	for node in node_list:
+		node_graph[node] = node_neighbors(node)
+	return node_graph
+
 
 ips = ["192.168.0.44", "192.168.0.48", "192.168.0.50"]
 test([ap[0] for ap in accessPointLists])
