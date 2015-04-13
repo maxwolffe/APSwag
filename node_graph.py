@@ -1,6 +1,7 @@
 import json
 import requests
 import networkx as nx
+import matplotlib.pyplot as plt
 
 
 apString =     """ 10.20.8.40 - FamilyRoom, 04:18:d6:20:60:44, UniFi AP-Pro, channel 6, 140
@@ -114,26 +115,36 @@ def node_graph(nodes, friendly_only = True):
     friendly_macs - a list of mac addresses that are registered with the network. 
     friendly_only - optional argument, if true, will construct a graph with only friendly nodes, otherwise includes rogue nodes. 
     """
-    G = nx.DiGraph()
+    G = nx.Graph() # Should this be directed?
     friendly_macs = []
     mac_host_match = {}
 
     for node in nodes.values():
-        friendly_macs.extend(node['macs'])
+        friendly_macs.extend(node['bssid'])
         G.add_node(node['hostname'])
-        for mac in node['macs']:
+        for mac in node['bssid']:
             mac_host_match[mac] = node['hostname']
 
     for node in nodes.values():
         # right now I'm just going to match MAC to host name, and then make a hostname graph. (Maybe not useful for rogue_detect.)
         for neighbor in node['neighbors']:
-            print(neighbor)
             ip = neighbor[0].lower() 
             if ip in friendly_macs:
                 G.add_edge(node['hostname'], mac_host_match[ip], weight = neighbor[2])
 
     return G
 
+def three_color(graph):
+    """
+    returns a best effort three coloring of the graph provided. 
+
+    Algorithm idea: Attempt to three color graph. If successful return coloring.
+    Else: Delete the edge that has the weakest signal and try again. 
+    """
+
+    "YOUR CODE HERE"
+
+    
 test_ip = apls[0][0]
 nodes, rogue_nodes = populate_nodes()
 graph = node_graph(nodes)
