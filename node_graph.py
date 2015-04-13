@@ -31,6 +31,11 @@ for apl in apls:
 
 
 def populate_nodes():
+    """
+    Generates a dictionary with node information, 
+    and a list of nodes which are not registered with the network. 
+
+    """
     nodes = {apl[0] : {} for apl in apls}
     friendly_bssids = []
     neighbor_nodes = []
@@ -125,7 +130,6 @@ def node_graph(nodes, friendly_only = True):
             print(neighbor)
             ip = neighbor[0].lower() 
             if ip in friendly_macs:
-                print("This happened")
                 G.add_edge(node['hostname'], mac_host_match[ip], weight = neighbor[2])
 
     return G
