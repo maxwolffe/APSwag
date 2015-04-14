@@ -1,6 +1,7 @@
 import json
-#import urllib.request
 import requests
+import networkx as nx
+import matplotlib.pyplot as plt
 
 
 apString =     """ 10.20.8.40 - FamilyRoom, 04:18:d6:20:60:44, UniFi AP-Pro, channel 6, 140
@@ -32,41 +33,30 @@ for apl in apls:
 
 def populate_nodes():
     """
-    Populate nodes with data. 
-
-    Returns:
-    
-    nodes - Dictionary with (Ip -> 
-        (dictionary json -> feed.json, 
-        macs -> mac addresses for all interfaces, 
-        neighbors -> list of nodes detectable from that node)),
-    
-    rogue_nodes - List of nodes (bssid, ssid, signal) of all node not registered to the network.
+    Generates a dictionary with node information, 
+    and a list of nodes which are not registered with the network. 
 
     """
-
     nodes = {apl[0] : {} for apl in apls}
-    friendly_macs = []
+    friendly_bssids = []
     neighbor_nodes = []
     rogue_nodes = []
 
     for ip in nodes.keys():
         nodes[ip]['json'] = get_json(ip)
         node_json = nodes[ip]['json']
-        nodes[ip]['macs'] = get_macs(node_json)
+        nodes[ip]['bssid'] = get_bssid(node_json)
         nodes[ip]['neighbors'] = get_neighbors(node_json)
+        nodes[ip]['hostname'] = node_json['core.general']['hostname']
     
     for node in nodes.values():
-        friendly_macs.extend(node['macs'])
+        friendly_bssids.extend(node['bssid'])
         neighbor_nodes.extend(node['neighbors'])
 
-    rogue_nodes = find_rogues(neighbor_nodes, friendly_macs)
+    rogue_nodes = find_rogues(neighbor_nodes, friendly_bssids)
     return nodes, rogue_nodes
 
 def get_json(node_ip):
-    """
-    Requests and returns json from node ip address. 
-    """
     try:
         node_json = requests.get('http://' + node_ip + '/nodewatcher/feed').json()
         return node_json
@@ -74,11 +64,12 @@ def get_json(node_ip):
         print("Exception in get_json " + str(e))
 
 
-def get_macs(node_json):
+def get_bssid(node_json):
     """
     Returns a list of mac addresses belonging to the node in the network.
     """
-    return [interface[1]['mac'] for interface in node_json['core.interfaces'].items() if interface[0] != '_meta']
+    return [interface[1]['mac'].lower() for interface in node_json['core.interfaces'].items() if interface[0] != '_meta']
+    #This may be a problem. Assuming bssid is always a mac defined in the interfaces. Where else would I find bssid?
 
 
 def find_rogues(node_list, friendly_macs):
@@ -93,24 +84,68 @@ def find_rogues(node_list, friendly_macs):
 
 def get_neighbors(node_json):
     """
-    Return a list of node tuples (bssid, ssid, signal) which are neighbors to node.
+    Return a list of node tuples (bssid [mac], ssid, signal) which are neighbors to node.
 
     Arguments:
     node_json - feed.json from the nodewatcher dir. 
     """
     radio_neighbors = []
-    radio_json = node_json['core.wireless']['radios']
+    radio_json = {}
+    try:
+        radio_json = node_json['core.wireless']['radios']
+    except KeyError as e:
+        print("Whoops! No Radio! " + str(e))
     radio_survey = []
     for radio in radio_json.values():
         if 'survey' in radio.keys():
             radio_survey.extend(radio['survey'])
     for r_node in radio_survey:
         try:
-            radio_neighbors.append((r_node['bssid'], r_node['ssid'], r_node['signal']))
+            # Here we could keep track of the interface that this neighbor is on to better construct the graph. 
+            radio_neighbors.append((r_node['bssid'], r_node['ssid'], r_node['signal']))  
         except KeyError as e:
             print("Key Error " + node_json['core.general']['hostname'] + str(e))
     return radio_neighbors
 
+def node_graph(nodes, friendly_only = True):
+    """ Returns a networkx graph of nodes in the network, with signal between them as edges. 
 
+    Arguments:
+    nodes - node dictionary returned by populate nodes
+    friendly_macs - a list of mac addresses that are registered with the network. 
+    friendly_only - optional argument, if true, will construct a graph with only friendly nodes, otherwise includes rogue nodes. 
+    """
+    G = nx.Graph() # Should this be directed?
+    friendly_macs = []
+    mac_host_match = {}
+
+    for node in nodes.values():
+        friendly_macs.extend(node['bssid'])
+        G.add_node(node['hostname'])
+        for mac in node['bssid']:
+            mac_host_match[mac] = node['hostname']
+
+    for node in nodes.values():
+        # right now I'm just going to match MAC to host name, and then make a hostname graph. (Maybe not useful for rogue_detect.)
+        for neighbor in node['neighbors']:
+            ip = neighbor[0].lower() 
+            if ip in friendly_macs:
+                G.add_edge(node['hostname'], mac_host_match[ip], weight = neighbor[2])
+
+    return G
+
+def three_color(graph):
+    """
+    returns a best effort three coloring of the graph provided. 
+
+    Algorithm idea: Attempt to three color graph. If successful return coloring.
+    Else: Delete the edge that has the weakest signal and try again. 
+    """
+
+    "YOUR CODE HERE"
+
+    
 test_ip = apls[0][0]
 nodes, rogue_nodes = populate_nodes()
+graph = node_graph(nodes)
+
