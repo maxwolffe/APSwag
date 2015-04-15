@@ -70,21 +70,24 @@ class Node:
         radio_survey = [radio['survey'][0] for radio in radio_json.values() if 'survey' in radio.keys()]
         for r_node in radio_survey:
             try: 
-                self.neighbors.append((r_node['bssid'], r_node['ssid'], r_node['signal'], r_node['channel']))  
+                self.neighbors.append(Device(r_node['bssid'], r_node['ssid'], r_node['signal'], r_node['channel']))  
             except KeyError as e:
                 print("Key Error " + node_json['core.general']['hostname'] + str(e))
 
 
 class Device(): #Better Idea for a name here? Anyone?
-    bssid = ''
-    ssid = ''
-    signal = 0
-    channel = 0
+    bssid = '' #Previously 0th element of device list
+    ssid = '' #Previously 1st element of device list
+    signal = 0 #Previously 2nd element of device list
+    channel = 0 #Not Previously in device list
+    distance = 100000
 
     def __init__(self, bssid, ssid, signal, channel):
         self.bssid = bssid
         self.ssid = ssid
         self.signal = signal
+        print(signal)
+        self.distance = (-1 * signal)
         self.channel = channel
 
 
@@ -140,7 +143,7 @@ def find_rogues(node_list, friendly_macs):
     node_list - list of all nodes (bssid, ssid, signal) that are detected by cloyne ap radios
     friendly_macs - list of mac addresses registered with network. 
     """
-    return [node for node in node_list if (node[0].lower() not in friendly_macs)]
+    return [node for node in node_list if (node.bssid.lower() not in friendly_macs)]
 
 
 def node_graph(nodes, friendly_only = True):
@@ -164,10 +167,60 @@ def node_graph(nodes, friendly_only = True):
     for node in nodes:
         # right now I'm just going to match MAC to host name, and then make a hostname graph. (Maybe not useful for rogue_detect.)
         for neighbor in node.neighbors:
-            ip = neighbor[0].lower() 
+            ip = neighbor.bssid.lower() 
             if ip in friendly_macs:
-                G.add_edge(node.hostname, mac_host_match[ip], weight = neighbor[2])
+                G.add_edge(node.hostname, mac_host_match[ip], weight = neighbor.signal)
     return G
+
+
+def all_graph(nodes):
+    """
+    Returns a graph containing every AP and all their neighbors, with edges between each.
+    Stores lists of nodes and edges for later coloring.
+    """
+    G = nx.Graph()
+    APs = []
+    all_macs = []
+    friendly_macs = []
+    rogue_macs = []
+    mac_host_match = {}
+    mac_rogue_match = {}
+    real_edges = []
+    rogue_edges = []
+    friend_edges = []
+    fake_edges = []
+    channel_dict = {}
+
+    for node in nodes:
+        friendly_macs.extend(node.bssid)
+        all_macs.extend(node.bssid)
+        G.add_node(node.hostname)
+        for mac in node.bssid:
+            mac_host_match[mac] = node.hostname
+    for node in nodes:
+        for neighbor in node.neighbors:
+            if neighbor.bssid not in friendly_macs:
+                if neighbor.bssid not in all_macs:
+                    all_macs.extend(neighbor.bssid)
+                    rogue_macs.extend(neighbor.bssid)
+                    mac_rogue_match[neighbor.bssid] = neighbor.ssid
+                real_edges.append((node.hostname, neighbor.ssid, neighbor.distance))
+                rogue_edges.append((node.hostname, neighbor.ssid, neighbor.distance))
+            else:
+                friend_edges.append((node.hostname, mac_host_match[neighbor.bssid], neighbor.distance))
+                real_edges.append((node.hostname, mac_host_match[neighbor.bssid], neighbor.distance))
+    #Create fake edges to ensure that nodes which are not neighbors are farther apart in the graph
+
+
+    #Create Graph
+    G.add_nodes_from(list(set(mac_host_match.values())), color='blue')
+    G.add_nodes_from(list(set(mac_rogue_match.values())), color='red')
+    G.add_weighted_edges_from(rogue_edges, color='red')
+    G.add_weighted_edges_from(friend_edges, color='blue')
+
+
+    return G
+
 
 def three_color(graph):
     """
@@ -184,6 +237,7 @@ test_ip = apls[0][0]
 
 #Test with hardcoded in (Cloyne) Access Point IPs
 nodes, rogue_nodes = populate_nodes([apl[0] for apl in apls])
-print([node.neighbors for node in nodes])
-graph = node_graph(nodes)
-
+#graph = node_graph(nodes)
+graph = all_graph(nodes)
+nx.draw_networkx(graph)
+plt.show()
