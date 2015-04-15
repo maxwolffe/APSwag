@@ -197,18 +197,23 @@ def all_graph(nodes):
         G.add_node(node.hostname)
         for mac in node.bssid:
             mac_host_match[mac] = node.hostname
+    print ("List of Friendly macs below:")
+    print friendly_macs
     for node in nodes:
         for neighbor in node.neighbors:
-            if neighbor.bssid not in friendly_macs:
-                if neighbor.bssid not in all_macs:
-                    all_macs.extend(neighbor.bssid)
-                    rogue_macs.extend(neighbor.bssid)
-                    mac_rogue_match[neighbor.bssid] = neighbor.ssid
+            mac = neighbor.bssid.lower()
+            print("Neighbor with bssid: " + mac)
+            if mac not in friendly_macs:
+                print ("Not in friendly macs")
+                if mac not in all_macs:
+                    all_macs.extend(mac)
+                    rogue_macs.extend(mac)
+                    mac_rogue_match[mac] = neighbor.ssid
                 real_edges.append((node.hostname, neighbor.ssid, neighbor.distance))
                 rogue_edges.append((node.hostname, neighbor.ssid, neighbor.distance))
             else:
-                friend_edges.append((node.hostname, mac_host_match[neighbor.bssid], neighbor.distance))
-                real_edges.append((node.hostname, mac_host_match[neighbor.bssid], neighbor.distance))
+                friend_edges.append((node.hostname, mac_host_match[mac], neighbor.distance))
+                real_edges.append((node.hostname, mac_host_match[mac], neighbor.distance))
     #Create fake edges to ensure that nodes which are not neighbors are farther apart in the graph
 
 
@@ -239,5 +244,11 @@ test_ip = apls[0][0]
 nodes, rogue_nodes = populate_nodes([apl[0] for apl in apls])
 #graph = node_graph(nodes)
 graph = all_graph(nodes)
-nx.draw_networkx(graph)
+print("Edges")
+print graph.edges(None,1)
+print("Nodes")
+print graph.nodes(1)
+nx.draw_networkx(graph, pos=nx.spring_layout(graph), node_color=[node[1]['color'] for node in graph.nodes(1)], edge_color=[edge[2]['color'] for edge in graph.edges(None,1)])
+#nx.draw_networkx_nodes(graph, pos=nx.spring_layout(graph), node_color=[node[1]['color'] for node in graph.nodes(1)])
+#nx.draw_networkx_edges(graph, pos=nx.spring_layout(graph), edge_color=[edge[2]['color'] for edge in graph.edges(None,1)])
 plt.show()
