@@ -31,36 +31,94 @@ for apl in apls:
 #  --------   DATA  ----------- #
 
 
+class Node:
+
+    hostname  = ''
+    json = ''
+    bssid = ''
+    neighbors = []
+
+    def __init__(self, json):
+        self.json = json
+        self.hostname = json['core.general']['hostname']
+        self.get_bssid()
+        self.get_neighbors()
+
+
+    def get_bssid(self):
+        """
+        Returns a list of mac addresses belonging to the node in the network.
+        """
+        try:
+            self.bssid = [interface[1]['mac'].lower() for interface in self.json['core.interfaces'].items() if interface[0] != '_meta']
+            #This may be a problem. Assuming bssid is always a mac defined in the interfaces. Where else would I find bssid?
+        except Exception as e:
+            print("Failure to find BSSID: " + str(e))
+
+    
+    def get_neighbors(self):
+        """
+        Return a list of node tuples (bssid [mac], ssid, signal) which are neighbors to node.
+
+        """
+        node_json = self.json
+        radio_json = {}
+        try:
+            radio_json = node_json['core.wireless']['radios']
+        except KeyError as e:
+            print("Whoops! No Radio! " + str(e))
+        radio_survey = [radio['survey'][0] for radio in radio_json.values() if 'survey' in radio.keys()]
+        for r_node in radio_survey:
+            try: 
+                self.neighbors.append((r_node['bssid'], r_node['ssid'], r_node['signal'], r_node['channel']))  
+            except KeyError as e:
+                print("Key Error " + node_json['core.general']['hostname'] + str(e))
+
+
+class Device(): #Better Idea for a name here? Anyone?
+    bssid = ''
+    ssid = ''
+    signal = 0
+    channel = 0
+
+    def __init__(self, bssid, ssid, signal, channel):
+        self.bssid = bssid
+        self.ssid = ssid
+        self.signal = signal
+        self.channel = channel
+
+
+
 def populate_nodes(ip_list):
     """
     Generates a dictionary with node information, 
     and a list of nodes which are not registered with the network. 
 
     """
-    nodes = {ap_ip : {} for ap_ip in ip_list}
-    friendly_bssids = []
-    neighbor_nodes = []
-    rogue_nodes = []
+    #nodes = {ap_ip : {} for ap_ip in ip_list}
+    #nodes is a dictionary with AP IPs as keys, and a dictionary of features of that AP as values
+    friendly_bssids = [] #list of friendly nodes?
+    neighbor_nodes = [] #list of nodes who can hear eachother?
+    rogue_nodes = [] #list of unfriendly nodes
+    our_nodes = [] #list of all nodes
 
-    for ip in nodes.keys():
+    for ip in ip_list:
         node_json  = get_json(ip)
         if not node_json:
             print("Failed to obtain json for IP address " + ip)
-            del nodes[ip]
+
 
         else:
             print("Assigning values for " + ip)
-            nodes[ip]['json'] = node_json
-            nodes[ip]['bssid'] = get_bssid(node_json)
-            nodes[ip]['neighbors'] = get_neighbors(node_json)
-            nodes[ip]['hostname'] = node_json['core.general']['hostname']
+            n = Node(node_json)
+            our_nodes.append(n)
     
-    for node in nodes.values():
-        friendly_bssids.extend(node['bssid'])
-        neighbor_nodes.extend(node['neighbors'])
+    for node in our_nodes:
+        friendly_bssids.extend(node.bssid)
+        neighbor_nodes.extend(node.neighbors)
 
     rogue_nodes = find_rogues(neighbor_nodes, friendly_bssids)
-    return nodes, rogue_nodes
+    return our_nodes, rogue_nodes
 
 def get_json(node_ip):
     """
@@ -74,14 +132,6 @@ def get_json(node_ip):
         print("Exception in get_json " + str(e))
 
 
-def get_bssid(node_json):
-    """
-    Returns a list of mac addresses belonging to the node in the network.
-    """
-    return [interface[1]['mac'].lower() for interface in node_json['core.interfaces'].items() if interface[0] != '_meta']
-    #This may be a problem. Assuming bssid is always a mac defined in the interfaces. Where else would I find bssid?
-
-
 def find_rogues(node_list, friendly_macs):
     """
     returns a list of nodes which have mac addresses which are not registered with the list of mac addresses in the network.
@@ -92,30 +142,6 @@ def find_rogues(node_list, friendly_macs):
     """
     return [node for node in node_list if (node[0].lower() not in friendly_macs)]
 
-def get_neighbors(node_json):
-    """
-    Return a list of node tuples (bssid [mac], ssid, signal) which are neighbors to node.
-
-    Arguments:
-    node_json - feed.json from the nodewatcher dir. 
-    """
-    radio_neighbors = []
-    radio_json = {}
-    try:
-        radio_json = node_json['core.wireless']['radios']
-    except KeyError as e:
-        print("Whoops! No Radio! " + str(e))
-    radio_survey = []
-    for radio in radio_json.values():
-        if 'survey' in radio.keys():
-            radio_survey.extend(radio['survey'])
-    for r_node in radio_survey:
-        try:
-            # Here we could keep track of the interface that this neighbor is on to better construct the graph. 
-            radio_neighbors.append((r_node['bssid'], r_node['ssid'], r_node['signal']))  
-        except KeyError as e:
-            print("Key Error " + node_json['core.general']['hostname'] + str(e))
-    return radio_neighbors
 
 def node_graph(nodes, friendly_only = True):
     """ Returns a networkx graph of nodes in the network, with signal between them as edges. 
@@ -129,19 +155,18 @@ def node_graph(nodes, friendly_only = True):
     friendly_macs = []
     mac_host_match = {}
 
-    for node in nodes.values():
-        friendly_macs.extend(node['bssid'])
-        G.add_node(node['hostname'])
-        for mac in node['bssid']:
-            mac_host_match[mac] = node['hostname']
+    for node in nodes:
+        friendly_macs.extend(node.bssid)
+        G.add_node(node.hostname)
+        for mac in node.bssid:
+            mac_host_match[mac] = node.hostname
 
-    for node in nodes.values():
+    for node in nodes:
         # right now I'm just going to match MAC to host name, and then make a hostname graph. (Maybe not useful for rogue_detect.)
-        for neighbor in node['neighbors']:
+        for neighbor in node.neighbors:
             ip = neighbor[0].lower() 
             if ip in friendly_macs:
-                G.add_edge(node['hostname'], mac_host_match[ip], weight = neighbor[2])
-
+                G.add_edge(node.hostname, mac_host_match[ip], weight = neighbor[2])
     return G
 
 def three_color(graph):
@@ -159,6 +184,6 @@ test_ip = apls[0][0]
 
 #Test with hardcoded in (Cloyne) Access Point IPs
 nodes, rogue_nodes = populate_nodes([apl[0] for apl in apls])
-print([node['neighbors'] for node in nodes])
+print([node.neighbors for node in nodes])
 graph = node_graph(nodes)
 
