@@ -2,6 +2,13 @@ import json
 import requests
 import networkx as nx
 import matplotlib.pyplot as plt
+import os
+
+# ------ TESTING -------- #
+
+test_json = set()
+
+# ------ END TESTING ----- #
 
 
 apString =     """ 10.20.8.40 - FamilyRoom, 04:18:d6:20:60:44, UniFi AP-Pro, channel 6, 140
@@ -21,12 +28,11 @@ apString =     """ 10.20.8.40 - FamilyRoom, 04:18:d6:20:60:44, UniFi AP-Pro, cha
 
 apList = apString.split('\n')
 apIPList = [ap.split('-') for ap in apList]
-#print (apIPList)
 apListList = [[ap[0]] + ap[1].split(",") for ap in apIPList]
 apls = [[nameString.strip() for nameString in ap] for ap in apListList]
 
 for apl in apls:
-    print apl
+    print(apl)
 
 #  --------   DATA  ----------- #
 
@@ -75,7 +81,7 @@ class Node:
                 print("Key Error " + node_json['core.general']['hostname'] + str(e))
 
 
-class Device(): #Better Idea for a name here? Anyone?
+class Device: #Better Idea for a name here? Anyone?
     bssid = '' #Previously 0th element of device list
     ssid = '' #Previously 1st element of device list
     signal = 0 #Previously 2nd element of device list
@@ -92,7 +98,7 @@ class Device(): #Better Idea for a name here? Anyone?
 
 
 
-def populate_nodes(ip_list):
+def populate_nodes(ip_list, test = True):
     """
     Generates a dictionary with node information, 
     and a list of nodes which are not registered with the network. 
@@ -106,10 +112,20 @@ def populate_nodes(ip_list):
     our_nodes = [] #list of all nodes
 
     for ip in ip_list:
-        node_json  = get_json(ip)
+        if not test:
+            node_json  = get_json(ip)
+        if test:
+            test_file = None
+            for test_file in os.listdir("./test_data"):
+                node_json = None
+                with open("./test_data/" + test_file, "r") as my_file:
+                    node_json = json.loads(my_file.read())
+                if test_file not in test_json:
+                    test_json.add(test_file)
+                    break
+
         if not node_json:
             print("Failed to obtain json for IP address " + ip)
-
 
         else:
             print("Assigning values for " + ip)
@@ -198,7 +214,7 @@ def all_graph(nodes):
         for mac in node.bssid:
             mac_host_match[mac] = node.hostname
     print ("List of Friendly macs below:")
-    print friendly_macs
+    print (friendly_macs)
     for node in nodes:
         for neighbor in node.neighbors:
             mac = neighbor.bssid.lower()
@@ -245,10 +261,10 @@ nodes, rogue_nodes = populate_nodes([apl[0] for apl in apls])
 #graph = node_graph(nodes)
 graph = all_graph(nodes)
 print("Edges")
-print graph.edges(None,1)
+print(graph.edges(None,1))
 print("Nodes")
-print graph.nodes(1)
-nx.draw_networkx(graph, pos=nx.spring_layout(graph), node_color=[node[1]['color'] for node in graph.nodes(1)], edge_color=[edge[2]['color'] for edge in graph.edges(None,1)])
+print(graph.nodes(1))
+nx.draw_networkx(graph, pos=nx.circular_layout(graph), node_color=[node[1]['color'] for node in graph.nodes(1)], edge_color=[edge[2]['color'] for edge in graph.edges(None,1)])
 #nx.draw_networkx_nodes(graph, pos=nx.spring_layout(graph), node_color=[node[1]['color'] for node in graph.nodes(1)])
 #nx.draw_networkx_edges(graph, pos=nx.spring_layout(graph), edge_color=[edge[2]['color'] for edge in graph.edges(None,1)])
 plt.show()
