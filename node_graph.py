@@ -21,7 +21,7 @@ apString =     """ 10.20.8.40 - FamilyRoom, 04:18:d6:20:60:44, UniFi AP-Pro, cha
 
 apList = apString.split('\n')
 apIPList = [ap.split('-') for ap in apList]
-print (apIPList)
+#print (apIPList)
 apListList = [[ap[0]] + ap[1].split(",") for ap in apIPList]
 apls = [[nameString.strip() for nameString in ap] for ap in apListList]
 
@@ -31,23 +31,29 @@ for apl in apls:
 #  --------   DATA  ----------- #
 
 
-def populate_nodes():
+def populate_nodes(ip_list):
     """
     Generates a dictionary with node information, 
     and a list of nodes which are not registered with the network. 
 
     """
-    nodes = {apl[0] : {} for apl in apls}
+    nodes = {ap_ip : {} for ap_ip in ip_list}
     friendly_bssids = []
     neighbor_nodes = []
     rogue_nodes = []
 
     for ip in nodes.keys():
-        nodes[ip]['json'] = get_json(ip)
-        node_json = nodes[ip]['json']
-        nodes[ip]['bssid'] = get_bssid(node_json)
-        nodes[ip]['neighbors'] = get_neighbors(node_json)
-        nodes[ip]['hostname'] = node_json['core.general']['hostname']
+        node_json  = get_json(ip)
+        if not node_json:
+            print("Failed to obtain json for IP address " + ip)
+            del nodes[ip]
+
+        else:
+            print("Assigning values for " + ip)
+            nodes[ip]['json'] = node_json
+            nodes[ip]['bssid'] = get_bssid(node_json)
+            nodes[ip]['neighbors'] = get_neighbors(node_json)
+            nodes[ip]['hostname'] = node_json['core.general']['hostname']
     
     for node in nodes.values():
         friendly_bssids.extend(node['bssid'])
@@ -57,8 +63,12 @@ def populate_nodes():
     return nodes, rogue_nodes
 
 def get_json(node_ip):
+    """
+    Returns the json feed of the node found at IP address node_ip. 
+    Will often error if a presumed access point is offline.
+    """
     try:
-        node_json = requests.get('http://' + node_ip + '/nodewatcher/feed').json()
+        node_json = requests.get('http://' + node_ip + '/nodewatcher/feed', timeout=3).json()
         return node_json
     except Exception as e:
         print("Exception in get_json " + str(e))
@@ -146,6 +156,9 @@ def three_color(graph):
 
     
 test_ip = apls[0][0]
-nodes, rogue_nodes = populate_nodes()
+
+#Test with hardcoded in (Cloyne) Access Point IPs
+nodes, rogue_nodes = populate_nodes([apl[0] for apl in apls])
+print([node['neighbors'] for node in nodes])
 graph = node_graph(nodes)
 
