@@ -3,6 +3,8 @@ import requests
 import networkx as nx
 import matplotlib.pyplot as plt
 import os
+import Queue
+import random
 
 # ------ TESTING -------- #
 
@@ -249,9 +251,115 @@ def three_color(graph):
 
     Algorithm idea: Attempt to three color graph. If successful return coloring.
     Else: Delete the edge that has the weakest signal and try again. 
+
+    Frontier is last element in coloring
     """
 
-    "YOUR CODE HERE"
+    start_nodes = graph.nodes()
+    start_edges = graph.edges(data = True)
+    colors = ['red', 'green', 'blue']
+    complete = False
+
+    colored_graph = graph.copy()
+
+    for node in start_nodes:
+        while True :
+            if len(colored_graph.neighbors(node)) <= len(colors) + 1:
+                break
+            weakest_edge = min(colored_graph.edges(node, data = True), key = lambda edge: edge[2]['weight'])
+            if weakest_edge in start_edges:
+                start_edges.remove(weakest_edge)
+            else:
+                start_edges.remove((weakest_edge[1], weakest_edge[0], weakest_edge[2]))
+            colored_graph.remove_edges_from(colored_graph.edges())
+            colored_graph.add_edges_from(start_edges)
+            
+    while len(start_edges) > 0:
+        print(len(start_edges))
+        bfs_q = Queue.Queue()
+        start_node = random.choice(start_nodes)
+        for color in colors:
+            bfs_q.put([(start_node, color)])
+
+        colored_graph.remove_edges_from(colored_graph.edges())
+        colored_graph.add_edges_from(start_edges)
+
+        # BFS to determine if a coloring exists given current number of edges, not currently working. 
+        while not bfs_q.empty():
+            print(bfs_q.qsize())
+            
+            coloring = bfs_q.get()
+
+            check_condition = check_graph(colored_graph, coloring)
+
+            if not check_condition[0]:
+                continue
+
+            if check_condition[1] == "complete":
+                return colored_graph
+
+            colored_set = set()
+            for node in coloring:
+                colored_set.add(node[0]) 
+            checked_neighbors = 0
+
+            for point in coloring:
+                for neighbor in colored_graph.neighbors(point[0]):
+                    if neighbor in colored_set:
+                        print("don't add")
+                        continue
+                    for color in colors:
+                        bfs_q.put(coloring + [(neighbor, color)])
+                        colored_set.add(neighbor)
+
+        start_edges.remove(min(start_edges, key = lambda edge:edge[2]['weight']))
+
+
+
+def check_node_color_ok(graph, node):
+    """ 
+    returns False if a node has the same color as one of its neighbors, True otherwise
+
+    takes a graph and a node (node_name, data(as dictionary)) 
+
+    """
+    if node[1]['color'] == None:
+        return (True, "incomplete")
+    for neighbor in graph.neighbors(node[0]):
+        if neighbor == node[0]:
+            continue
+        if node[1]['color'] == graph.node[neighbor]['color']:
+            return (False, "false")
+    return (True, "complete")
+
+def check_graph(graph, coloring):
+    """
+    Takes a graph, and a list of of (node, color) tuples, assigns the nodes to colors, 
+    and checks to see if it is a valid three coloring. returns True if it is, False otherwise. 
+
+    """
+    checked_set = set()
+    nodes = []
+    complete = "complete"
+    bfs_q = Queue.Queue()
+
+    for node in graph.node:
+        nodes.append(node)
+        graph.node[node]['color'] = None
+
+    for node in coloring:
+        graph.node[node[0]]['color'] = node[1]
+
+    for check_node in graph.nodes():
+        checked_result = check_node_color_ok(graph, (check_node, graph.node[check_node]))
+        if not checked_result[0]:
+            return (False, "bad graph")
+        if checked_result[1] == "incomplete":
+            complete = "incomplete"
+
+    return (True, complete)
+
+
 
     
 test_ip = apls[0][0]
@@ -264,7 +372,7 @@ print("Edges")
 print(graph.edges(None,1))
 print("Nodes")
 print(graph.nodes(1))
-nx.draw_networkx(graph, pos=nx.circular_layout(graph), node_color=[node[1]['color'] for node in graph.nodes(1)], edge_color=[edge[2]['color'] for edge in graph.edges(None,1)])
+#nx.draw_networkx(graph, pos=nx.circular_layout(graph), node_color=[node[1]['color'] for node in graph.nodes(1)], edge_color=[edge[2]['color'] for edge in graph.edges(None,1)])
 #nx.draw_networkx_nodes(graph, pos=nx.spring_layout(graph), node_color=[node[1]['color'] for node in graph.nodes(1)])
 #nx.draw_networkx_edges(graph, pos=nx.spring_layout(graph), edge_color=[edge[2]['color'] for edge in graph.edges(None,1)])
-plt.show()
+#plt.show()
